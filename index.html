@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="theme-color" content="#FBF8F4" />
+<title>macOS Terminal · Interactive Cheat Sheet</title>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: { extend: {
+      colors: { clay: { DEFAULT: '#D97757', dark: '#C2603F', soft: '#F4E3DA' }, ink: '#1A1A18' },
+      fontFamily: { mono: ['ui-monospace','SFMono-Regular','Menlo','Consolas','monospace'] },
+    } },
+  };
+</script>
+<style>
+  html { scroll-behavior: smooth; -webkit-text-size-adjust: 100%; }
+  ::selection { background: #D9775744; }
+  input { font-size: 16px; }
+  .fade-in { animation: fadeIn .28s ease both; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: none; } }
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  .safe-b { padding-bottom: env(safe-area-inset-bottom); }
+</style>
+</head>
+<body class="bg-[#FBF8F4] text-ink antialiased">
+<div id="root"></div>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo, useRef } = React;
+
+/* -------- key symbols -------- */
+const SYM = {
+  "Command":"⌘","Control":"⌃","Option":"⌥","Shift":"⇧",
+  "Return":"⏎","Tab":"⇥","Delete":"⌫","Space":"␣","Fn":"fn",
+  "Up Arrow":"↑","Down Arrow":"↓","Left Arrow":"←","Right Arrow":"→",
+  "Page Up":"⇞","Page Down":"⇟","Home":"↖","End":"↘"
+};
+const MODS = new Set(["Command","Control","Option","Shift"]);
+
+/* -------- data (from the Terminal Shortcuts cheat sheet) -------- */
+const DATA = [
+ { cat:"Windows & Tabs", items:[
+   {keys:["Command","N"], action:"New window", use:"Running a script and want a completely separate window to do something else without interrupting it"},
+   {keys:["Control","Command","N"], action:"New window, same command", use:"You SSH'd into a server — open a second window connected to the same server instantly"},
+   {keys:["Command","T"], action:"New tab", use:"Mid-Python-script but need to check a file — open a tab instead of stopping"},
+   {keys:["Control","Command","T"], action:"New tab, same command", use:"Same SSH server, new tab — keep multiple sessions open to one machine"},
+   {keys:["Shift","Command","T"], action:"Show or hide tab bar", use:"Only one tab open and you want to reclaim vertical screen space"},
+   {keys:["Shift","Command","\\"], action:"Show all tabs / exit overview", use:"8 tabs open and you can't remember which has your long-running job"},
+   {keys:["Shift","Command","N"], action:"New command", use:"Run a program (like Python) in a fresh window without a standard shell"},
+   {keys:["Shift","Command","K"], action:"New remote connection", use:"SSH into a server from a dialog instead of typing the full ssh command"},
+   {keys:["Command","I"], action:"Show or hide Inspector", use:"Check what profile settings (font, color, size) a particular tab is using"},
+   {keys:["Shift","Command","I"], action:"Edit title", use:"Rename tabs \"SSH Prod,\" \"Local Dev,\" \"Log Watcher\" so you know what's what"},
+   {keys:["Option","Command","I"], action:"Edit background color", use:"Color-code tabs: red for prod, blue for staging, white for local — prevents accidents"},
+   {keys:["Command","+"], action:"Make fonts bigger", use:"Demoing to someone across the room who can't read the screen"},
+   {keys:["Command","−"], action:"Make fonts smaller", use:"See more output at once without scrolling"},
+   {keys:["Command","`"], action:"Next window", use:"Flip between two windows — one running a server, one for commands"},
+   {keys:["Command","Shift","~"], action:"Previous window", use:"Same — cycle backward"},
+   {keys:["Control","Tab"], action:"Next tab", use:"Cycle through tabs without reaching for the mouse"},
+   {keys:["Control","Shift","Tab"], action:"Previous tab", use:"Cycle backward through tabs"},
+   {keys:["Command","D"], action:"Split into two panes", use:"Watch a log on one side while running commands on the other — same window"},
+   {keys:["Shift","Command","D"], action:"Close split pane", use:"Done watching the log, close the extra pane"},
+   {keys:["Command","W"], action:"Close tab", use:"Done with a task, clean up the tab"},
+   {keys:["Shift","Command","W"], action:"Close window", use:"Close an entire window with all its tabs at once"},
+   {keys:["Option","Command","W"], action:"Close other tabs", use:"Keep just the one you're in and close the other nine"},
+   {keys:["Option","Shift","Command","W"], action:"Close all", use:"End of the work session — nuke everything"},
+   {keys:["Command","Home"], action:"Scroll to top", use:"A command dumped 500 lines — jump to the very beginning to read from the top"},
+   {keys:["Command","End"], action:"Scroll to bottom", use:"You scrolled up to read old output, now jump back to the live prompt"},
+   {keys:["Command","Page Up"], action:"Page up", use:"Page through a long build log (upward)"},
+   {keys:["Command","Page Down"], action:"Page down", use:"Page through a long build log (downward)"},
+   {keys:["Option","Command","Page Up"], action:"Line up", use:"Scroll line by line to find a specific error (upward)"},
+   {keys:["Option","Command","Page Down"], action:"Line down", use:"Scroll line by line to find a specific error (downward)"},
+ ]},
+ { cat:"Edit the Command Line", items:[
+   {keys:["Option"], note:"click", action:"Reposition the insertion point", use:"Spotted a typo mid-command — click exactly where you need to fix it"},
+   {keys:["Control","A"], top:true, action:"Move to beginning of line", use:"100-character command and you need to add `sudo` at the front — jump there instantly"},
+   {keys:["Control","E"], top:true, action:"Move to end of line", use:"You jumped to the start to fix something, now jump back to the end to finish"},
+   {keys:["Right Arrow"], action:"Forward one character", use:"Fine-tuned cursor movement to fix a single character"},
+   {keys:["Left Arrow"], action:"Backward one character", use:"Fine-tuned cursor movement to fix a single character"},
+   {keys:["Option","Right Arrow"], action:"Forward one word", use:"Long file path — jump word by word to the typo instead of holding arrows"},
+   {keys:["Option","Left Arrow"], action:"Backward one word", use:"Same, moving in the other direction"},
+   {keys:["Control","U"], top:true, action:"Delete the whole line", use:"Started a command and want to scrap the whole thing and start over"},
+   {keys:["Control","K"], action:"Delete to end of line", use:"Everything after the cursor is wrong — wipe it from there forward"},
+   {keys:["Option","D"], action:"Delete forward to end of word", use:"Replace one specific word toward the end of a command"},
+   {keys:["Control","W"], action:"Delete back to start of word", use:"Wrong filename at the end — delete it and retype"},
+   {keys:["Delete"], action:"Delete one character", use:"Standard typo fix"},
+   {keys:["Fn","Delete"], action:"Forward-delete one character", use:"Cursor before the wrong character — delete forward instead of back"},
+   {keys:["Control","T"], action:"Transpose two characters", use:"You typed `sl` instead of `ls` — fix the swap without retyping"},
+ ]},
+ { cat:"Select & Find Text", items:[
+   {keys:["Shift","Command"], note:"double-click", action:"Select a complete file path", use:"An error shows `/usr/local/lib/python3.11/…` — grab the whole path to copy it"},
+   {keys:[], note:"Triple-click", action:"Select a complete line", use:"Grab an entire output line to paste into a doc or email"},
+   {keys:[], note:"Double-click", action:"Select a word", use:"Grab a specific filename or command from output"},
+   {keys:["Shift","Command"], note:"double-click URL", action:"Select a URL", use:"A script printed a URL — select it cleanly to open in a browser"},
+   {keys:["Option"], note:"drag", action:"Select a rectangular block", use:"Copy a neat column of data from tabular output (like `ps aux`)"},
+   {keys:["Command","X"], action:"Cut", use:"Standard cut"},
+   {keys:["Command","C"], action:"Copy", use:"Standard copy"},
+   {keys:["Control","Shift","Command","C"], action:"Copy without background color", use:"Paste output into a doc without dragging the black background with it"},
+   {keys:["Option","Shift","Command","C"], action:"Copy plain text", use:"Ensures pasted text has no hidden formatting"},
+   {keys:["Command","V"], action:"Paste", use:"Standard paste"},
+   {keys:["Shift","Command","V"], action:"Paste the selection", use:"Paste what you highlighted without going to the clipboard"},
+   {keys:["Control","Command","V"], action:"Paste escaped text", use:"Pasting a path with spaces — Terminal escapes them so the command doesn't break"},
+   {keys:["Control","Shift","Command","V"], action:"Paste escaped selection", use:"Same, but from your current selection"},
+   {keys:["Command","F"], action:"Find", use:"Huge log output and you need to search for the word \"error\""},
+   {keys:["Command","G"], action:"Find next", use:"Step forward through multiple instances of what you found"},
+   {keys:["Command","Shift","G"], action:"Find previous", use:"Step backward through multiple instances"},
+   {keys:["Command","E"], action:"Find using selected text", use:"Highlight a weird error code, then search for it without typing it"},
+   {keys:["Command","J"], action:"Jump to selected text", use:"Found something with Find and want to scroll to where it sits in the output"},
+   {keys:["Command","A"], action:"Select all", use:"Copy your entire terminal session into a doc"},
+   {keys:["Control","Command","Space"], action:"Open the character viewer", use:"Paste a special character like an em dash into a command"},
+ ]},
+ { cat:"Marks & Bookmarks", items:[
+   {keys:["Command","U"], action:"Mark", use:"Mark the start of each new task so you can jump back to it later"},
+   {keys:["Option","Command","U"], action:"Mark as bookmark", use:"A named, persistent bookmark — e.g. \"start of deploy\""},
+   {keys:["Shift","Command","U"], action:"Unmark", use:"Remove a mark you no longer need"},
+   {keys:["Command","Return"], action:"Mark line and send return", use:"Auto-mark each command so the whole session is navigable"},
+   {keys:["Shift","Command","Return"], action:"Send return without marking", use:"Run a command without adding it to your marks (for throwaway steps)"},
+   {keys:["Shift","Command","M"], action:"Insert bookmark", use:"Drop a bookmark mid-session at a point you want to return to"},
+   {keys:["Option","Shift","Command","M"], action:"Insert named bookmark", use:"Label it \"before DB migration\" so you know exactly what it means later"},
+   {keys:["Command","Up Arrow"], action:"Jump to previous mark", use:"Move through your commands like chapters in a book"},
+   {keys:["Command","Down Arrow"], action:"Jump to next mark", use:"Same, moving forward"},
+   {keys:["Option","Command","Up Arrow"], action:"Jump to previous bookmark", use:"Jump only between your important named checkpoints"},
+   {keys:["Option","Command","Down Arrow"], action:"Jump to next bookmark", use:"Same, moving forward"},
+   {keys:["Command","L"], action:"Clear to previous mark", use:"Clean up output since the last mark to cut visual noise"},
+   {keys:["Option","Command","L"], action:"Clear to previous bookmark", use:"Same, but back to your last named bookmark"},
+   {keys:["Command","K"], action:"Clear to start", use:"Nuke all output and start with a clean screen"},
+   {keys:["Shift","Command","A"], action:"Select between marks", use:"Select all output from one task (between two marks) to copy or review"},
+ ]},
+ { cat:"Other Shortcuts", items:[
+   {keys:["Control","Command","F"], action:"Enter or exit full screen", use:"Focused session — maximize Terminal so nothing distracts you"},
+   {keys:["Shift","Command","C"], action:"Show or hide colors", use:"Customize your terminal's text and background colors"},
+   {keys:["Command",","], action:"Open Terminal settings", use:"Quick access to preferences for fonts, themes, etc."},
+   {keys:["Command","."], action:"Break", use:"A script is stuck in an infinite loop — kill it immediately (same as Control-C)"},
+   {keys:["Command","P"], action:"Print", use:"Need a hard copy of terminal output for documentation"},
+   {keys:["Option","Command","R"], action:"Soft reset terminal state", use:"Display is glitched (garbled characters) — reset it without closing"},
+   {keys:["Control","Option","Command","R"], action:"Hard reset terminal state", use:"Soft reset didn't fix it — full, more thorough reset"},
+   {keys:["Command"], note:"double-click URL", action:"Open a URL", use:"A script output a URL — open it in your browser without copying"},
+   {keys:[], note:"Drag file from Finder", action:"Add the file's complete path", use:"Drag a file in instead of typing its full path"},
+   {keys:["Command","S"], action:"Export text as…", use:"Save your entire session as a text file for documentation or sharing"},
+   {keys:["Shift","Command","S"], action:"Export selected text as…", use:"Save just the relevant portion of output, not the whole session"},
+   {keys:["Control","R"], top:true, action:"Reverse-search command history", use:"Ran a complex command days ago — type part of it and Terminal finds it"},
+   {keys:["Command","R"], action:"Toggle \"Allow Mouse Reporting\"", use:"Some apps capture your mouse — toggle this if clicking stops working"},
+   {keys:["Command","Option","O"], action:"Toggle \"Use Option as Meta Key\"", use:"Enables Option shortcuts like Option-D for word deletion"},
+   {keys:["Shift","Command","Down Arrow"], action:"Show alternate screen", use:"Programs like vim or man use an alternate screen — view it"},
+   {keys:["Shift","Command","Up Arrow"], action:"Hide alternate screen", use:"Hide the alternate screen"},
+   {keys:["Control","Shift","Command","?"], action:"Open man page for selection", use:"Highlight `grep` and instantly pull up its manual page"},
+   {keys:["Control","Option","Command","/"], action:"Search man index for selection", use:"Highlight a term and find all related man pages"},
+   {keys:["Tab"], action:"Complete file or directory name", use:"Typing a long filename — press Tab and Terminal fills in the rest"},
+   {keys:["Tab","Tab"], action:"List possible completions", use:"You typed `cd D` and want to see all directories starting with D"},
+ ]},
+];
+
+const ALL = DATA.flatMap(s => s.items.map(it => ({ ...it, cat: s.cat })));
+const KB = ALL.filter(it => (it.keys || []).length > 0);   // pressable combos for the quiz
+const TOTAL = ALL.length;
+const ESSENTIALS = ALL.filter(it => it.top).length;
+
+/* render `code` spans inside use text */
+function withCode(text) {
+  return String(text).split(/(`[^`]+`)/g).map((p, i) =>
+    p.startsWith("`") && p.endsWith("`")
+      ? <code key={i} className="font-mono text-[0.82em] text-clay-dark bg-clay/10 px-1 py-0.5 rounded">{p.slice(1, -1)}</code>
+      : <React.Fragment key={i}>{p}</React.Fragment>);
+}
+
+/* -------- keycap -------- */
+function Cap({ k }) {
+  const sym = SYM[k];
+  const label = k.replace(" Arrow", "");
+  if (sym) {
+    return (
+      <kbd className="inline-flex flex-col items-center justify-center min-w-[2.1rem] px-2 py-1 rounded-lg bg-white border border-stone-300 border-b-[3px] shadow-sm leading-none">
+        <span className="text-clay font-bold text-sm">{sym}</span>
+        <span className="text-[8px] uppercase tracking-wide text-stone-400 mt-0.5">{label}</span>
+      </kbd>
+    );
+  }
+  return (
+    <kbd className="inline-flex items-center justify-center min-w-[2.1rem] h-[2.1rem] px-2 rounded-lg bg-white border border-stone-300 border-b-[3px] shadow-sm font-mono text-sm font-semibold text-stone-700">{k}</kbd>
+  );
+}
+
+function Keys({ item, justify }) {
+  const keys = item.keys || [];
+  return (
+    <div className={"flex flex-wrap items-center gap-1.5 " + (justify || "")}>
+      {keys.map((k, i) => (
+        <React.Fragment key={i}>
+          {i > 0 && <span className="text-stone-400 text-xs font-mono">+</span>}
+          <Cap k={k} />
+        </React.Fragment>
+      ))}
+      {item.note && (
+        <>
+          {keys.length > 0 && <span className="text-stone-400 text-xs font-mono">+</span>}
+          <span className="italic text-xs text-clay-dark bg-clay/10 border border-dashed border-clay/40 px-2.5 py-1 rounded-full">{item.note}</span>
+        </>
+      )}
+    </div>
+  );
+}
+
+/* -------- Trainer (playground quiz) -------- */
+function sample(arr, n, exclude) {
+  const out = [], used = new Set();
+  let guard = 0;
+  while (out.length < n && guard < 500) {
+    guard++;
+    const c = arr[Math.floor(Math.random() * arr.length)];
+    if (c.action === exclude.action || used.has(c.action)) continue;
+    used.add(c.action); out.push(c);
+  }
+  return out;
+}
+function makeQ() {
+  const correct = KB[Math.floor(Math.random() * KB.length)];
+  const opts = [correct, ...sample(KB, 3, correct)]
+    .map(o => ({ o, r: Math.random() })).sort((a, b) => a.r - b.r).map(x => x.o);
+  return { correct, opts };
+}
+
+function Trainer() {
+  const [q, setQ] = useState(makeQ);
+  const [picked, setPicked] = useState(null);
+  const [score, setScore] = useState(0);
+  const [seen, setSeen] = useState(0);
+  const [streak, setStreak] = useState(0);
+
+  const choose = (o) => {
+    if (picked) return;
+    setPicked(o);
+    setSeen(s => s + 1);
+    if (o.action === q.correct.action) { setScore(s => s + 1); setStreak(s => s + 1); }
+    else setStreak(0);
+  };
+  const next = () => { setQ(makeQ()); setPicked(null); };
+
+  return (
+    <div className="rounded-2xl overflow-hidden shadow-xl ring-1 ring-black/5 bg-[#262220]">
+      {/* title bar */}
+      <div className="flex items-center gap-1.5 px-3 py-2 bg-[#1d1a18]">
+        <span className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]"></span>
+        <span className="w-2.5 h-2.5 rounded-full bg-[#febc2e]"></span>
+        <span className="w-2.5 h-2.5 rounded-full bg-[#28c840]"></span>
+        <span className="ml-1.5 text-stone-400 text-[11px] font-mono">trainer — zsh</span>
+        <span className="ml-auto text-[11px] font-mono text-stone-300">
+          {score}/{seen} {streak >= 2 && <span className="text-clay">· 🔥{streak}</span>}
+        </span>
+      </div>
+
+      {/* prompt */}
+      <div className="px-4 pt-4 font-mono text-[13px] text-stone-300">
+        <span className="text-emerald-400">michael@mac</span> <span className="text-stone-500">~</span> %
+        <span className="text-stone-400"> # which shortcut?</span>
+      </div>
+      <div className="px-4 pt-2 pb-1">
+        <p className="text-stone-100 font-semibold text-[15px]">{q.correct.action}</p>
+        <p className="text-stone-400 text-[13px] mt-1">{withCode(q.correct.use)}</p>
+      </div>
+
+      {/* options */}
+      <div className="px-4 py-3 grid grid-cols-1 gap-2">
+        {q.opts.map((o, i) => {
+          const isCorrect = o.action === q.correct.action;
+          const isPicked = picked && o.action === picked.action;
+          let ring = "border-stone-700";
+          if (picked) {
+            if (isCorrect) ring = "border-emerald-500 bg-emerald-500/10";
+            else if (isPicked) ring = "border-red-500 bg-red-500/10";
+            else ring = "border-stone-800 opacity-50";
+          }
+          return (
+            <button key={i} onClick={() => choose(o)} disabled={!!picked}
+              className={"flex items-center justify-between gap-3 rounded-xl border-2 px-3 py-2.5 text-left transition " + ring + (picked ? "" : " active:bg-white/5 hover:border-stone-500")}>
+              <Keys item={o} />
+              {picked && isCorrect && <span className="text-emerald-400 text-lg shrink-0">✓</span>}
+              {picked && isPicked && !isCorrect && <span className="text-red-400 text-lg shrink-0">✗</span>}
+            </button>
+          );
+        })}
+      </div>
+
+      {/* feedback / next */}
+      <div className="px-4 pb-4 flex items-center gap-3">
+        {picked
+          ? <p className="text-[13px] text-stone-300 font-mono">
+              {picked.action === q.correct.action ? "Nailed it." : "Not quite — see the ✓ above."}
+            </p>
+          : <p className="text-[13px] text-stone-500 font-mono">Tap the shortcut that does this.</p>}
+        <button onClick={next}
+          className="ml-auto text-sm font-mono px-4 py-2 rounded-lg bg-clay text-white active:bg-clay-dark">
+          {picked ? "Next →" : "Skip"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* -------- Reference list -------- */
+function RefList({ items }) {
+  if (!items.length) return <div className="text-center py-12 text-stone-400 text-sm">No shortcuts match that search.</div>;
+  return (
+    <div className="space-y-2.5">
+      {items.map((it, i) => (
+        <div key={i} className={"p-4 rounded-xl bg-white border " + (it.top ? "border-emerald-300" : "border-stone-200")}>
+          <Keys item={it} />
+          <div className="flex items-center gap-2 mt-3">
+            <span className="font-semibold text-ink">{it.action}</span>
+            {it.top && <span className="text-[10px] font-mono uppercase tracking-wide text-emerald-600 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded">★ Essential</span>}
+          </div>
+          <p className="text-sm text-stone-600 mt-1">{withCode(it.use)}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* -------- Flashcards -------- */
+function Cards() {
+  const deck = useMemo(() =>
+    ALL.map((c, i) => ({ c, k: (i * 7 + 3) % ALL.length })).sort((a, b) => a.k - b.k).map(x => x.c), []);
+  const [i, setI] = useState(0);
+  const [flip, setFlip] = useState(false);
+  const card = deck[i];
+  const go = d => { setFlip(false); setI(v => (v + d + deck.length) % deck.length); };
+  return (
+    <div>
+      <div onClick={() => setFlip(f => !f)}
+        className="cursor-pointer select-none rounded-2xl bg-white border border-stone-200 shadow-sm p-7 min-h-[210px] flex flex-col items-center justify-center text-center active:shadow-md">
+        <span className="text-[10px] uppercase tracking-wider text-clay font-semibold mb-3">{card.cat}</span>
+        {!flip
+          ? <div><p className="text-stone-700 text-[15px]">{withCode(card.use)}</p><p className="text-xs text-stone-400 mt-4">tap to reveal the shortcut</p></div>
+          : <div className="fade-in flex flex-col items-center gap-3"><Keys item={card} justify="justify-center" /><p className="font-semibold text-ink">{card.action}</p></div>}
+      </div>
+      <div className="flex items-center justify-between mt-3">
+        <button onClick={() => go(-1)} className="px-5 py-2.5 rounded-lg bg-white border border-stone-200 active:border-clay/50 text-sm">‹ Prev</button>
+        <span className="text-sm text-stone-400 font-mono">{i + 1} / {deck.length}</span>
+        <button onClick={() => go(1)} className="px-5 py-2.5 rounded-lg bg-ink text-white active:bg-clay text-sm">Next ›</button>
+      </div>
+    </div>
+  );
+}
+
+/* -------- App -------- */
+const TABS = ["All", ...DATA.map(d => d.cat), "★ Essentials", "Cards"];
+
+function App() {
+  const [tab, setTab] = useState("All");
+  const [q, setQ] = useState("");
+  const query = q.trim().toLowerCase();
+
+  const filtered = useMemo(() => {
+    return ALL.filter(it => {
+      const catOk = tab === "All" || (tab === "★ Essentials" ? it.top : it.cat === tab);
+      const hay = ((it.keys || []).join(" ") + " " + (it.note || "") + " " + it.action + " " + it.use + " " + it.cat).toLowerCase();
+      return catOk && (!query || hay.includes(query));
+    });
+  }, [tab, query]);
+
+  return (
+    <div className="max-w-xl mx-auto px-4 py-7">
+      <header className="mb-6">
+        <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-clay/10 text-clay-dark text-[11px] font-medium mb-3">
+          <span className="w-1.5 h-1.5 rounded-full bg-clay animate-pulse"></span> Interactive · phone-friendly
+        </div>
+        <h1 className="text-3xl font-bold tracking-tight text-ink">macOS Terminal Cheat Sheet</h1>
+        <p className="mt-2 text-stone-600 text-[15px]">Every keystroke that makes the command line faster — paired with the exact moment you'd reach for it. {TOTAL} shortcuts across 5 categories.</p>
+      </header>
+
+      <section className="mb-8">
+        <SectionTitle eyebrow="Trainer" title="Quiz yourself" />
+        <Trainer />
+        <p className="text-[11px] text-stone-400 mt-2">Read the situation, tap the shortcut that fits. Builds muscle memory without touching your real Terminal.</p>
+      </section>
+
+      <section>
+        <SectionTitle eyebrow="Reference" title="Browse & search" />
+        <div className="flex gap-1 p-1 rounded-xl bg-stone-100 mb-3 overflow-x-auto no-scrollbar">
+          {TABS.map(t => (
+            <button key={t} onClick={() => setTab(t)}
+              className={"shrink-0 px-3.5 py-2 rounded-lg text-sm font-medium transition whitespace-nowrap " + (tab === t ? "bg-white shadow-sm text-ink" : "text-stone-500")}>{t}</button>
+          ))}
+        </div>
+        {tab !== "Cards" && (
+          <>
+            <div className="relative mb-3">
+              <input value={q} onChange={e => setQ(e.target.value)} placeholder="Search shortcuts, actions, or situations…"
+                className="w-full pl-10 pr-3 py-3 rounded-xl border border-stone-200 bg-white outline-none focus:border-clay/60" />
+              <span className="absolute left-3.5 top-3 text-stone-400 text-lg">⌕</span>
+            </div>
+            <p className="text-xs text-stone-400 font-mono mb-3">Showing <b className="text-clay">{filtered.length}</b> of {TOTAL}</p>
+          </>
+        )}
+        <div className="min-h-[200px]">
+          {tab === "Cards" ? <Cards /> : <RefList items={filtered} />}
+        </div>
+      </section>
+
+      <footer className="mt-12 pt-5 border-t border-stone-200 text-[11px] text-stone-400 space-y-1 safe-b">
+        <p>Interactive macOS Terminal shortcuts reference. Symbols: ⌘ Command · ⌃ Control · ⌥ Option · ⇧ Shift.</p>
+        <p>On a Mac, press <b className="text-clay-dark">Cmd-P</b> to print this as a one-page reference.</p>
+      </footer>
+    </div>
+  );
+}
+
+function SectionTitle({ eyebrow, title }) {
+  return (
+    <div className="mb-3">
+      <div className="text-[10px] uppercase tracking-widest text-clay font-semibold">{eyebrow}</div>
+      <h2 className="text-lg font-semibold text-ink mt-0.5">{title}</h2>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>
